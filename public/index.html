@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Painel Inteligente de Ações - Top 3 Melhores Compras</title>
+  <title>Painel Inteligente de Ações - Top 3 & Radar Interativo</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     :root {
@@ -72,6 +72,7 @@
       border: 1px solid var(--border-color);
       border-radius: 10px;
       padding: 20px;
+      margin-bottom: 30px;
     }
     table {
       width: 100%;
@@ -85,29 +86,55 @@
       font-size: 14px;
     }
     th { color: #94a3b8; }
-    tr:hover { background: rgba(255,255,255,0.02); }
+    tr { cursor: pointer; transition: background 0.15s; }
+    tr:hover { background: rgba(56, 189, 248, 0.1); }
     .lucro { color: var(--accent-green); font-weight: bold; }
+
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.7);
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+    }
+    .modal-content {
+      background: var(--card-bg);
+      border: 2px solid var(--accent-blue);
+      border-radius: 12px;
+      padding: 25px;
+      width: 90%;
+      max-width: 600px;
+      position: relative;
+    }
+    .close-btn {
+      position: absolute;
+      top: 15px; right: 20px;
+      font-size: 24px;
+      color: #94a3b8;
+      cursor: pointer;
+    }
+    .close-btn:hover { color: #fff; }
   </style>
 </head>
 <body>
 
   <header>
     <div>
-      <h1>📈 Painel de Ações & Top 3 Melhores Compras</h1>
+      <h1>📈 Painel de Ações & Radar Interativo</h1>
       <small id="atualizacao" style="color: #94a3b8;">Carregando última atualização...</small>
     </div>
     <button class="btn" onclick="atualizarAgente()">🔄 Rodar Agente & Atualizar</button>
   </header>
 
-  <!-- TOP 3 AÇÕES RECOMENDADAS COM GRÁFICOS -->
+  <!-- TOP 3 AÇÕES RECOMENDADAS -->
   <h2 style="font-size: 18px; color: var(--accent-green); margin-bottom: 15px;">🔥 As 3 Melhores Oportunidades de Compra Agora</h2>
-  <div class="top3-container" id="top3-grid">
-    <!-- Será preenchido via JavaScript -->
-  </div>
+  <div class="top3-container" id="top3-grid"></div>
 
-  <!-- TABELA DE OPORTUNIDADES -->
+  <!-- TABELA DE OPORTUNIDADES (RADAR INTERATIVO) -->
   <div class="card">
-    <h3>🔍 Radar Completo de Ações de Baixo Valor & Tendência</h3>
+    <h3>🔍 Radar Completo de Ações (Clique em qualquer linha para abrir o gráfico detalhado)</h3>
     <div style="overflow-x: auto;">
       <table>
         <thead>
@@ -128,28 +155,39 @@
     </div>
   </div>
 
+  <!-- MODAL DE GRÁFICO DA EMPRESA SELECIONADA -->
+  <div class="modal" id="modalGrafico">
+    <div class="modal-content">
+      <span class="close-btn" onclick="fecharModal()">&times;</span>
+      <h2 id="modal-titulo" style="margin-top: 0; color: var(--accent-blue);">Gráfico da Ação</h2>
+      <p>Preço Atual: <strong id="modal-preco">--</strong> | Tendência: <span id="modal-tendencia" style="color: var(--accent-green);">--</span></p>
+      <canvas id="graficoModal" height="180"></canvas>
+    </div>
+  </div>
+
   <script>
     let graficosTop3 = [];
+    let graficoModalInstance = null;
+    let dadosGlobais = null;
 
     async function carregarDados() {
       try {
         const res = await fetch('/api/dados');
-        const dados = await res.json();
+        dadosGlobais = await res.json();
 
-        document.getElementById('atualizacao').innerText = 'Última atualização do agente (de hora em hora): ' + new Date(dados.ultimaAtualizacao).toLocaleString();
+        document.getElementById('atualizacao').innerText = 'Última atualização (hora em hora): ' + new Date(dadosGlobais.ultimaAtualizacao).toLocaleString();
 
-        const top3 = dados.listaCompleta.slice(0, 3);
+        const top3 = dadosGlobais.listaCompleta.slice(0, 3);
         const container = document.getElementById('top3-grid');
         container.innerHTML = '';
 
-        // Destruir gráficos anteriores para evitar vazamento de memória
         graficosTop3.forEach(g => g.destroy());
         graficosTop3 = [];
 
         top3.forEach((acao, index) => {
           const cardId = 'card-grafico-' + index;
-          const cardHtml = `
-            <div class="card-top3">
+          container.innerHTML += `
+            <div class="card-top3" style="cursor: pointer;" onclick="abrirGrafico('${acao.ticker}')">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
                 <span class="badge">#${index + 1} Recomendação</span>
                 <span style="font-size: 16px; font-weight: bold;">${acao.ticker}</span>
@@ -161,19 +199,15 @@
               <canvas id="${cardId}" height="110"></canvas>
             </div>
           `;
-          container.innerHTML += cardHtml;
         });
 
-        // Renderizar os 3 gráficos após inserir no DOM
         top3.forEach((acao, index) => {
-          const cardId = 'card-grafico-' + index;
-          const ctx = document.getElementById(cardId).getContext('2d');
+          const ctx = document.getElementById('card-grafico-' + index).getContext('2d');
           const chart = new Chart(ctx, {
             type: 'line',
             data: {
               labels: ['H-6', 'H-5', 'H-4', 'H-3', 'H-2', 'H-1', 'Atual'],
               datasets: [{
-                label: acao.ticker,
                 data: acao.historico,
                 borderColor: '#22c55e',
                 backgroundColor: 'rgba(34, 197, 94, 0.1)',
@@ -194,11 +228,11 @@
           graficosTop3.push(chart);
         });
 
-        // Preencher Tabela Completa
         const tbody = document.getElementById('tabela-acoes');
         tbody.innerHTML = '';
-        dados.listaCompleta.forEach((acao, idx) => {
+        dadosGlobais.listaCompleta.forEach((acao, idx) => {
           const tr = document.createElement('tr');
+          tr.onclick = () => abrirGrafico(acao.ticker);
           tr.innerHTML = `
             <td>#${idx + 1}</td>
             <td><strong>${acao.ticker}</strong></td>
@@ -214,6 +248,49 @@
       } catch (e) {
         console.error('Erro ao carregar dados:', e);
       }
+    }
+
+    function abrirGrafico(ticker) {
+      if (!dadosGlobais) return;
+      const acao = dadosGlobais.listaCompleta.find(a => a.ticker === ticker);
+      if (!acao) return;
+
+      document.getElementById('modal-titulo').innerText = `${acao.ticker} - ${acao.nome}`;
+      document.getElementById('modal-preco').innerText = `R$ ${acao.preco.toFixed(2)}`;
+      document.getElementById('modal-tendencia').innerText = acao.tendencia;
+
+      document.getElementById('modalGrafico').style.display = 'flex';
+
+      const ctx = document.getElementById('graficoModal').getContext('2d');
+      if (graficoModalInstance) graficoModalInstance.destroy();
+
+      graficoModalInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: ['H-6', 'H-5', 'H-4', 'H-3', 'H-2', 'H-1', 'Última Hora'],
+          datasets: [{
+            label: `Evolução de Preço (${acao.ticker})`,
+            data: acao.historico,
+            borderColor: '#38bdf8',
+            backgroundColor: 'rgba(56, 189, 248, 0.15)',
+            borderWidth: 3,
+            fill: true,
+            tension: 0.3
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: { labels: { color: '#f8fafc' } } },
+          scales: {
+            y: { grid: { color: '#334155' }, ticks: { color: '#94a3b8' } },
+            x: { grid: { display: false }, ticks: { color: '#94a3b8' } }
+          }
+        }
+      });
+    }
+
+    function fecharModal() {
+      document.getElementById('modalGrafico').style.display = 'none';
     }
 
     async function atualizarAgente() {
