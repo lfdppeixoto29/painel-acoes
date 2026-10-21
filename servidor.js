@@ -29,8 +29,9 @@ app.post('/api/atualizar', (req, res) => {
   }
 });
 
-cron.schedule('0 9 * * *', () => {
-  console.log('[CRON] Executando agente diário automatizado...');
+// Atualiza de hora em hora, das 10h às 18h, de segunda a sexta-feira (horário de funcionamento da Bolsa)
+cron.schedule('0 10-18 * * 1-5', () => {
+  console.log('[CRON] Executando agente de atualização horária (Horário de pregão)...');
   rodarAgente();
 });
 
