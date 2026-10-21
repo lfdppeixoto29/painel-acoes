@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Painel Inteligente de Ações - Oportunidades & Tendências</title>
+  <title>Painel Inteligente de Ações - Top 3 Melhores Compras</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     :root {
@@ -42,27 +42,26 @@
     }
     .btn:hover { opacity: 0.9; }
     
-    .destaque-card {
+    .top3-container {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+      margin-bottom: 30px;
+    }
+    @media(max-width: 1024px) { .top3-container { grid-template-columns: 1fr; } }
+
+    .card-top3 {
       background: linear-gradient(135deg, #1e293b 0%, #065f46 100%);
       border: 2px solid var(--accent-green);
       border-radius: 12px;
-      padding: 25px;
-      margin-bottom: 30px;
+      padding: 20px;
       box-shadow: 0 10px 25px -5px rgba(34, 197, 94, 0.2);
     }
-    .destaque-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 20px;
-      align-items: center;
-    }
-    @media(max-width: 768px) { .destaque-grid { grid-template-columns: 1fr; } }
-
     .badge {
       background: var(--accent-green);
       color: #000;
-      padding: 4px 10px;
-      font-size: 12px;
+      padding: 3px 8px;
+      font-size: 11px;
       font-weight: bold;
       border-radius: 20px;
       text-transform: uppercase;
@@ -94,36 +93,26 @@
 
   <header>
     <div>
-      <h1>📈 Painel de Ações & Oportunidades</h1>
+      <h1>📈 Painel de Ações & Top 3 Melhores Compras</h1>
       <small id="atualizacao" style="color: #94a3b8;">Carregando última atualização...</small>
     </div>
     <button class="btn" onclick="atualizarAgente()">🔄 Rodar Agente & Atualizar</button>
   </header>
 
-  <div class="destaque-card">
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-      <span class="badge">🔥 Melhor Compra Recomendada pelo Agente</span>
-      <span id="destaque-ticker" style="font-size: 20px; font-weight: bold;">--</span>
-    </div>
-    <div class="destaque-grid">
-      <div>
-        <h2 id="destaque-nome" style="margin: 0 0 10px 0; font-size: 28px;">Carregando...</h2>
-        <p>Preço Atual: <strong id="destaque-preco" style="font-size: 22px;">--</strong></p>
-        <p>Tendência de Crescimento: <span id="destaque-tendencia" style="color: var(--accent-green); font-weight: bold;">--</span></p>
-        <p>Lucro Estimado Projeção: <span id="destaque-lucro" class="lucro" style="font-size: 18px;">--</span></p>
-      </div>
-      <div>
-        <canvas id="graficoDestaque" height="140"></canvas>
-      </div>
-    </div>
+  <!-- TOP 3 AÇÕES RECOMENDADAS COM GRÁFICOS -->
+  <h2 style="font-size: 18px; color: var(--accent-green); margin-bottom: 15px;">🔥 As 3 Melhores Oportunidades de Compra Agora</h2>
+  <div class="top3-container" id="top3-grid">
+    <!-- Será preenchido via JavaScript -->
   </div>
 
+  <!-- TABELA DE OPORTUNIDADES -->
   <div class="card">
-    <h3>🔍 Radar de Ações de Baixo Valor & Tendência</h3>
+    <h3>🔍 Radar Completo de Ações de Baixo Valor & Tendência</h3>
     <div style="overflow-x: auto;">
       <table>
         <thead>
           <tr>
+            <th>Rank</th>
             <th>Ticker</th>
             <th>Empresa</th>
             <th>Preço Atual</th>
@@ -133,36 +122,85 @@
           </tr>
         </thead>
         <tbody id="tabela-acoes">
-          <tr><td colspan="6" style="text-align: center;">Carregando dados...</td></tr>
+          <tr><td colspan="7" style="text-align: center;">Carregando dados...</td></tr>
         </tbody>
       </table>
     </div>
   </div>
 
   <script>
-    let meuGrafico = null;
+    let graficosTop3 = [];
 
     async function carregarDados() {
       try {
         const res = await fetch('/api/dados');
         const dados = await res.json();
 
-        document.getElementById('atualizacao').innerText = 'Última atualização do agente: ' + new Date(dados.ultimaAtualizacao).toLocaleString();
+        document.getElementById('atualizacao').innerText = 'Última atualização do agente (de hora em hora): ' + new Date(dados.ultimaAtualizacao).toLocaleString();
 
-        const melhor = dados.melhorCompra;
-        document.getElementById('destaque-ticker').innerText = melhor.ticker;
-        document.getElementById('destaque-nome').innerText = melhor.nome;
-        document.getElementById('destaque-preco').innerText = 'R$ ' + melhor.preco.toFixed(2);
-        document.getElementById('destaque-tendencia').innerText = melhor.tendencia;
-        document.getElementById('destaque-lucro').innerText = '+' + melhor.lucroEstimado + '%';
+        const top3 = dados.listaCompleta.slice(0, 3);
+        const container = document.getElementById('top3-grid');
+        container.innerHTML = '';
 
-        renderizarGrafico(melhor.historico, melhor.ticker);
+        // Destruir gráficos anteriores para evitar vazamento de memória
+        graficosTop3.forEach(g => g.destroy());
+        graficosTop3 = [];
 
+        top3.forEach((acao, index) => {
+          const cardId = 'card-grafico-' + index;
+          const cardHtml = `
+            <div class="card-top3">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                <span class="badge">#${index + 1} Recomendação</span>
+                <span style="font-size: 16px; font-weight: bold;">${acao.ticker}</span>
+              </div>
+              <h3 style="margin: 0 0 5px 0; font-size: 20px;">${acao.nome}</h3>
+              <p style="margin: 5px 0;">Preço: <strong>R$ ${acao.preco.toFixed(2)}</strong></p>
+              <p style="margin: 5px 0;">Tendência: <span style="color: var(--accent-green); font-weight: bold;">${acao.tendencia}</span></p>
+              <p style="margin: 5px 0 15px 0;">Lucro Est.: <span class="lucro">+${acao.lucroEstimado}%</span></p>
+              <canvas id="${cardId}" height="110"></canvas>
+            </div>
+          `;
+          container.innerHTML += cardHtml;
+        });
+
+        // Renderizar os 3 gráficos após inserir no DOM
+        top3.forEach((acao, index) => {
+          const cardId = 'card-grafico-' + index;
+          const ctx = document.getElementById(cardId).getContext('2d');
+          const chart = new Chart(ctx, {
+            type: 'line',
+            data: {
+              labels: ['H-6', 'H-5', 'H-4', 'H-3', 'H-2', 'H-1', 'Atual'],
+              datasets: [{
+                label: acao.ticker,
+                data: acao.historico,
+                borderColor: '#22c55e',
+                backgroundColor: 'rgba(34, 197, 94, 0.1)',
+                borderWidth: 2,
+                fill: true,
+                tension: 0.3
+              }]
+            },
+            options: {
+              responsive: true,
+              plugins: { legend: { display: false } },
+              scales: {
+                y: { grid: { color: '#334155' }, ticks: { color: '#94a3b8', font: { size: 10 } } },
+                x: { grid: { display: false }, ticks: { color: '#94a3b8', font: { size: 10 } } }
+              }
+            }
+          });
+          graficosTop3.push(chart);
+        });
+
+        // Preencher Tabela Completa
         const tbody = document.getElementById('tabela-acoes');
         tbody.innerHTML = '';
-        dados.listaCompleta.forEach(acao => {
+        dados.listaCompleta.forEach((acao, idx) => {
           const tr = document.createElement('tr');
           tr.innerHTML = `
+            <td>#${idx + 1}</td>
             <td><strong>${acao.ticker}</strong></td>
             <td>${acao.nome}</td>
             <td>R$ ${acao.preco.toFixed(2)}</td>
@@ -176,35 +214,6 @@
       } catch (e) {
         console.error('Erro ao carregar dados:', e);
       }
-    }
-
-    function renderizarGrafico(historico, label) {
-      const ctx = document.getElementById('graficoDestaque').getContext('2d');
-      if (meuGrafico) meuGrafico.destroy();
-
-      meuGrafico = new Chart(ctx, {
-        type: 'line',
-        data: {
-          labels: ['Dia 1', 'Dia 2', 'Dia 3', 'Dia 4', 'Dia 5', 'Dia 6', 'Hoje'],
-          datasets: [{
-            label: 'Histórico e Tendência (' + label + ')',
-            data: historico,
-            borderColor: '#22c55e',
-            backgroundColor: 'rgba(34, 197, 94, 0.1)',
-            borderWidth: 3,
-            fill: true,
-            tension: 0.3
-          }]
-        },
-        options: {
-          responsive: true,
-          plugins: { legend: { display: false } },
-          scales: {
-            y: { grid: { color: '#334155' }, ticks: { color: '#94a3b8' } },
-            x: { grid: { display: false }, ticks: { color: '#94a3b8' } }
-          }
-        }
-      });
     }
 
     async function atualizarAgente() {
