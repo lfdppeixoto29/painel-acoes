@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Painel Inteligente de Ações - Top 3 & Radar Interativo</title>
+  <title>Painel Inteligente de Ações - Radar & Simulador de Ganhos</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     :root {
@@ -94,18 +94,20 @@
       display: none;
       position: fixed;
       top: 0; left: 0; width: 100%; height: 100%;
-      background: rgba(0,0,0,0.7);
+      background: rgba(0,0,0,0.8);
       justify-content: center;
       align-items: center;
       z-index: 1000;
+      overflow-y: auto;
+      padding: 20px;
     }
     .modal-content {
       background: var(--card-bg);
       border: 2px solid var(--accent-blue);
       border-radius: 12px;
       padding: 25px;
-      width: 90%;
-      max-width: 600px;
+      width: 100%;
+      max-width: 650px;
       position: relative;
     }
     .close-btn {
@@ -116,13 +118,30 @@
       cursor: pointer;
     }
     .close-btn:hover { color: #fff; }
+
+    .simulador-box {
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 15px;
+      margin-top: 20px;
+    }
+    .simulador-box select, .simulador-box input {
+      background: #0f172a;
+      color: #fff;
+      border: 1px solid var(--border-color);
+      padding: 8px 12px;
+      border-radius: 6px;
+      margin-right: 10px;
+      font-size: 14px;
+    }
   </style>
 </head>
 <body>
 
   <header>
     <div>
-      <h1>📈 Painel de Ações & Radar Interativo</h1>
+      <h1>📈 Painel de Ações & Simulador de Ganhos</h1>
       <small id="atualizacao" style="color: #94a3b8;">Carregando última atualização...</small>
     </div>
     <button class="btn" onclick="atualizarAgente()">🔄 Rodar Agente & Atualizar</button>
@@ -134,7 +153,7 @@
 
   <!-- TABELA DE OPORTUNIDADES (RADAR INTERATIVO) -->
   <div class="card">
-    <h3>🔍 Radar Completo de Ações (Clique em qualquer linha para abrir o gráfico detalhado)</h3>
+    <h3>🔍 Radar Completo de Ações (Clique em qualquer linha para abrir o gráfico e simular ganhos)</h3>
     <div style="overflow-x: auto;">
       <table>
         <thead>
@@ -155,13 +174,28 @@
     </div>
   </div>
 
-  <!-- MODAL DE GRÁFICO DA EMPRESA SELECIONADA -->
+  <!-- MODAL DE GRÁFICO E SIMULADOR DE GANHOS -->
   <div class="modal" id="modalGrafico">
     <div class="modal-content">
       <span class="close-btn" onclick="fecharModal()">&times;</span>
-      <h2 id="modal-titulo" style="margin-top: 0; color: var(--accent-blue);">Gráfico da Ação</h2>
+      <h2 id="modal-titulo" style="margin-top: 0; color: var(--accent-blue);">Análise e Simulação</h2>
       <p>Preço Atual: <strong id="modal-preco">--</strong> | Tendência: <span id="modal-tendencia" style="color: var(--accent-green);">--</span></p>
-      <canvas id="graficoModal" height="180"></canvas>
+      
+      <canvas id="graficoModal" height="150" style="margin-bottom: 15px;"></canvas>
+
+      <!-- SIMULADOR DE GANHOS (R$ 1.000 a R$ 10.000) -->
+      <div class="simulador-box">
+        <h4 style="margin: 0 0 10px 0; color: var(--accent-blue);">💰 Simulador de Expectativa de Ganho</h4>
+        <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px;">
+          <label>Valor a Investir (R$):</label>
+          <input type="number" id="inputValor" min="1000" max="10000" step="500" value="3000" oninput="calcularSimulacao()">
+        </div>
+        <div style="margin-top: 15px; font-size: 15px;">
+          <p style="margin: 5px 0;">Ações adquiridas: <strong id="sim-qtd">--</strong></p>
+          <p style="margin: 5px 0;">Lucro Projetado Estimado: <strong id="sim-lucro" class="lucro" style="font-size: 18px;">--</strong></p>
+          <p style="margin: 5px 0;">Valor Total Esperado ao Vender: <strong id="sim-total" style="color: var(--accent-blue); font-size: 18px;">--</strong></p>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -169,6 +203,7 @@
     let graficosTop3 = [];
     let graficoModalInstance = null;
     let dadosGlobais = null;
+    let acaoSelecionadaAtual = null;
 
     async function carregarDados() {
       try {
@@ -187,7 +222,7 @@
         top3.forEach((acao, index) => {
           const cardId = 'card-grafico-' + index;
           container.innerHTML += `
-            <div class="card-top3" style="cursor: pointer;" onclick="abrirGrafico('${acao.ticker}')">
+            <div class="card-top3" style="cursor: pointer;" onclick="abrirModal('${acao.ticker}')">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
                 <span class="badge">#${index + 1} Recomendação</span>
                 <span style="font-size: 16px; font-weight: bold;">${acao.ticker}</span>
@@ -232,7 +267,7 @@
         tbody.innerHTML = '';
         dadosGlobais.listaCompleta.forEach((acao, idx) => {
           const tr = document.createElement('tr');
-          tr.onclick = () => abrirGrafico(acao.ticker);
+          tr.onclick = () => abrirModal(acao.ticker);
           tr.innerHTML = `
             <td>#${idx + 1}</td>
             <td><strong>${acao.ticker}</strong></td>
@@ -250,10 +285,11 @@
       }
     }
 
-    function abrirGrafico(ticker) {
+    function abrirModal(ticker) {
       if (!dadosGlobais) return;
       const acao = dadosGlobais.listaCompleta.find(a => a.ticker === ticker);
       if (!acao) return;
+      acaoSelecionadaAtual = acao;
 
       document.getElementById('modal-titulo').innerText = `${acao.ticker} - ${acao.nome}`;
       document.getElementById('modal-preco').innerText = `R$ ${acao.preco.toFixed(2)}`;
@@ -267,7 +303,7 @@
       graficoModalInstance = new Chart(ctx, {
         type: 'line',
         data: {
-          labels: ['H-6', 'H-5', 'H-4', 'H-3', 'H-2', 'H-1', 'Última Hora'],
+          labels: ['H-6', 'H-5', 'H-4', 'H-3', 'H-2', 'H-1', 'Atual'],
           datasets: [{
             label: `Evolução de Preço (${acao.ticker})`,
             data: acao.historico,
@@ -287,6 +323,24 @@
           }
         }
       });
+
+      calcularSimulacao();
+    }
+
+    function calcularSimulacao() {
+      if (!acaoSelecionadaAtual) return;
+      const valorInvestido = parseFloat(document.getElementById('inputValor').value) || 0;
+      const preco = acaoSelecionadaAtual.preco;
+      const percentualLucro = acaoSelecionadaAtual.lucroEstimado;
+
+      const quantidadeAcoes = Math.floor(valorInvestido / preco);
+      const valorTotalAplicado = quantidadeAcoes * preco;
+      const valorLucro = valorTotalAplicado * (percentualLucro / 100);
+      const valorTotalFinal = valorTotalAplicado + valorLucro;
+
+      document.getElementById('sim-qtd').innerText = `${quantidadeAcoes} ações`;
+      document.getElementById('sim-lucro').innerText = `+ R$ ${valorLucro.toFixed(2)} (+${percentualLucro}%)`;
+      document.getElementById('sim-total').innerText = `R$ ${valorTotalFinal.toFixed(2)}`;
     }
 
     function fecharModal() {
