@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Painel Inteligente de Ações - Oportunidades & Tendências</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    :root {
+      --bg-color: #0f172a;
+      --card-bg: #1e293b;
+      --text-color: #f8fafc;
+      --accent-green: #22c55e;
+      --accent-blue: #38bdf8;
+      --border-color: #334155;
+    }
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background-color: var(--bg-color);
+      color: var(--text-color);
+      margin: 0;
+      padding: 20px;
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 15px;
+      margin-bottom: 25px;
+    }
+    h1 { margin: 0; font-size: 24px; color: var(--accent-blue); }
+    .btn {
+      background: var(--accent-blue);
+      color: #000;
+      border: none;
+      padding: 10px 20px;
+      font-weight: bold;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: 0.2s;
+    }
+    .btn:hover { opacity: 0.9; }
+    
+    .destaque-card {
+      background: linear-gradient(135deg, #1e293b 0%, #065f46 100%);
+      border: 2px solid var(--accent-green);
+      border-radius: 12px;
+      padding: 25px;
+      margin-bottom: 30px;
+      box-shadow: 0 10px 25px -5px rgba(34, 197, 94, 0.2);
+    }
+    .destaque-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      align-items: center;
+    }
+    @media(max-width: 768px) { .destaque-grid { grid-template-columns: 1fr; } }
+
+    .badge {
+      background: var(--accent-green);
+      color: #000;
+      padding: 4px 10px;
+      font-size: 12px;
+      font-weight: bold;
+      border-radius: 20px;
+      text-transform: uppercase;
+    }
+    
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      padding: 20px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+    }
+    th, td {
+      padding: 12px;
+      text-align: left;
+      border-bottom: 1px solid var(--border-color);
+      font-size: 14px;
+    }
+    th { color: #94a3b8; }
+    tr:hover { background: rgba(255,255,255,0.02); }
+    .lucro { color: var(--accent-green); font-weight: bold; }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div>
+      <h1>📈 Painel de Ações & Oportunidades</h1>
+      <small id="atualizacao" style="color: #94a3b8;">Carregando última atualização...</small>
+    </div>
+    <button class="btn" onclick="atualizarAgente()">🔄 Rodar Agente & Atualizar</button>
+  </header>
+
+  <div class="destaque-card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+      <span class="badge">🔥 Melhor Compra Recomendada pelo Agente</span>
+      <span id="destaque-ticker" style="font-size: 20px; font-weight: bold;">--</span>
+    </div>
+    <div class="destaque-grid">
+      <div>
+        <h2 id="destaque-nome" style="margin: 0 0 10px 0; font-size: 28px;">Carregando...</h2>
+        <p>Preço Atual: <strong id="destaque-preco" style="font-size: 22px;">--</strong></p>
+        <p>Tendência de Crescimento: <span id="destaque-tendencia" style="color: var(--accent-green); font-weight: bold;">--</span></p>
+        <p>Lucro Estimado Projeção: <span id="destaque-lucro" class="lucro" style="font-size: 18px;">--</span></p>
+      </div>
+      <div>
+        <canvas id="graficoDestaque" height="140"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>🔍 Radar de Ações de Baixo Valor & Tendência</h3>
+    <div style="overflow-x: auto;">
+      <table>
+        <thead>
+          <tr>
+            <th>Ticker</th>
+            <th>Empresa</th>
+            <th>Preço Atual</th>
+            <th>RSI</th>
+            <th>Tendência</th>
+            <th>Lucro Est.</th>
+          </tr>
+        </thead>
+        <tbody id="tabela-acoes">
+          <tr><td colspan="6" style="text-align: center;">Carregando dados...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    let meuGrafico = null;
+
+    async function carregarDados() {
+      try {
+        const res = await fetch('/api/dados');
+        const dados = await res.json();
+
+        document.getElementById('atualizacao').innerText = 'Última atualização do agente: ' + new Date(dados.ultimaAtualizacao).toLocaleString();
+
+        const melhor = dados.melhorCompra;
+        document.getElementById('destaque-ticker').innerText = melhor.ticker;
+        document.getElementById('destaque-nome').innerText = melhor.nome;
+        document.getElementById('destaque-preco').innerText = 'R$ ' + melhor.preco.toFixed(2);
+        document.getElementById('destaque-tendencia').innerText = melhor.tendencia;
+        document.getElementById('destaque-lucro').innerText = '+' + melhor.lucroEstimado + '%';
+
+        renderizarGrafico(melhor.historico, melhor.ticker);
+
+        const tbody = document.getElementById('tabela-acoes');
+        tbody.innerHTML = '';
+        dados.listaCompleta.forEach(acao => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td><strong>${acao.ticker}</strong></td>
+            <td>${acao.nome}</td>
+            <td>R$ ${acao.preco.toFixed(2)}</td>
+            <td>${acao.rsi}</td>
+            <td style="color: var(--accent-green);">${acao.tendencia}</td>
+            <td class="lucro">+${acao.lucroEstimado}%</td>
+          `;
+          tbody.appendChild(tr);
+        });
+
+      } catch (e) {
+        console.error('Erro ao carregar dados:', e);
+      }
+    }
+
+    function renderizarGrafico(historico, label) {
+      const ctx = document.getElementById('graficoDestaque').getContext('2d');
+      if (meuGrafico) meuGrafico.destroy();
+
+      meuGrafico = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: ['Dia 1', 'Dia 2', 'Dia 3', 'Dia 4', 'Dia 5', 'Dia 6', 'Hoje'],
+          datasets: [{
+            label: 'Histórico e Tendência (' + label + ')',
+            data: historico,
+            borderColor: '#22c55e',
+            backgroundColor: 'rgba(34, 197, 94, 0.1)',
+            borderWidth: 3,
+            fill: true,
+            tension: 0.3
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: { display: false } },
+          scales: {
+            y: { grid: { color: '#334155' }, ticks: { color: '#94a3b8' } },
+            x: { grid: { display: false }, ticks: { color: '#94a3b8' } }
+          }
+        }
+      });
+    }
+
+    async function atualizarAgente() {
+      const btn = document.querySelector('.btn');
+      btn.innerText = '🔄 Rodando Agente...';
+      await fetch('/api/atualizar', { method: 'POST' });
+      await carregarDados();
+      btn.innerText = '🔄 Rodar Agente & Atualizar';
+    }
+
+    carregarDados();
+  </script>
+</body>
+</html>
